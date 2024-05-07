@@ -4,6 +4,7 @@ class Kallisto < Formula
   url "https://github.com/pachterlab/kallisto/archive/refs/tags/V0.51.0.tar.gz"
   sha256 "efeb0191c1a6a0d6de69111fb66f4bda51ff31fb40c513280f072bd44556f80d"
   license "BSD-2-Clause"
+  revision 1
 
   bottle do
     sha256 cellar: :any,                 arm64_sequoia:  "f8d9e1a41ea5d8455fbba28f140c2d173c46355bb5c4fe14a0c2d0f50bea63f7"
