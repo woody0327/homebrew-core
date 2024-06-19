@@ -1481,6 +1481,7 @@ libfixbuf
 libfontenc
 libfreenect
 libfs
+libgcrypt
 libgedit-amtk
 libgedit-gfls
 libgedit-gtksourceview
