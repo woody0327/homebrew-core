@@ -25,9 +25,6 @@ class Julia < Formula
 
   depends_on "cmake" => :build # Needed to build LLVM
   depends_on "gcc" => :build # for gfortran
-  # TODO: Use system `suite-sparse` when `julia` supports v7.3+.
-  # PR ref: https://github.com/JuliaLang/julia/pull/52577
-  depends_on "suite-sparse" => :test # Check bundled copy is used
   depends_on "ca-certificates"
   depends_on "curl"
   depends_on "gmp"
@@ -41,6 +38,7 @@ class Julia < Formula
   depends_on "openlibm"
   depends_on "p7zip"
   depends_on "pcre2"
+  depends_on "suite-sparse"
   depends_on "utf8proc"
 
   uses_from_macos "perl" => :build
@@ -62,7 +60,32 @@ class Julia < Formula
     sha256 "1eea77d8024ad8bc9c733a0e0770661bc08228d335b20c4696350ed5dfdab29a"
   end
 
+  # Use Arch Linux patch to build with recent `suite-sparse`. May be able to remove in 1.11.0.
+  # PR ref: https://github.com/JuliaLang/julia/pull/52577
+  patch do
+    url "https://gitlab.archlinux.org/archlinux/packaging/packages/julia/-/raw/9b544b16fb1e18bc655c44b43672b068d2cd9112/julia-libcholmod-cuda.patch"
+    sha256 "f69afd7db3fabe4b747afa2404e1202c1dcfe0f8c5fe5238e424eea737fa2a23"
+  end
+
   def install
+    # Apply a similar workaround as Arch Linux to build with recent `suite-sparse`
+    # Ref: https://gitlab.archlinux.org/archlinux/packaging/packages/julia/-/blob/main/PKGBUILD?ref_type=heads#L78-86
+    cd "stdlib/srccache" do
+      checksum = "279b363ca8d3129d4742903d37c8b11545fa08a2" # hardcoded to fail on new release
+      tarball = "SparseArrays-#{checksum}.tar.gz"
+      md5_file = buildpath/"deps/checksums/SparseArrays-#{checksum}.tar.gz/md5"
+      sha512_file = buildpath/"deps/checksums/SparseArrays-#{checksum}.tar.gz/sha512"
+
+      system "tar", "-xzf", tarball
+      inreplace "JuliaSparse-SparseArrays.jl-#{checksum[0..6]}/src/solvers/cholmod.jl",
+                "elseif BUILD_VERSION.major != current_version.major",
+                "elseif BUILD_VERSION.major > current_version.major"
+      rm [tarball, md5_file, sha512_file]
+      system "tar", "-czf", tarball, "JuliaSparse-SparseArrays.jl-#{checksum[0..6]}"
+      md5_file.write Digest::MD5.hexdigest(File.read(tarball))
+      sha512_file.write Digest::SHA512.hexdigest(File.read(tarball))
+    end
+
     # Build documentation available at
     # https://github.com/JuliaLang/julia/blob/v#{version}/doc/build/build.md
     args = %W[
@@ -79,7 +102,7 @@ class Julia < Formula
       USE_SYSTEM_LIBBLASTRAMPOLINE=1
       USE_SYSTEM_LIBGIT2=1
       USE_SYSTEM_LIBSSH2=1
-      USE_SYSTEM_LIBSUITESPARSE=0
+      USE_SYSTEM_LIBSUITESPARSE=1
       USE_SYSTEM_MBEDTLS=1
       USE_SYSTEM_MPFR=1
       USE_SYSTEM_NGHTTP2=1
@@ -146,7 +169,7 @@ class Julia < Formula
 
     # Remove library versions from MbedTLS_jll, nghttp2_jll and others
     # https://git.archlinux.org/svntogit/community.git/tree/trunk/julia-hardcoded-libs.patch?h=packages/julia
-    %w[MbedTLS nghttp2 LibGit2 OpenLibm].each do |dep|
+    %w[MbedTLS nghttp2 LibGit2 OpenLibm SuiteSparse].each do |dep|
       (buildpath/"stdlib").glob("**/#{dep}_jll.jl") do |jll|
         inreplace jll, %r{@rpath/lib(\w+)(\.\d+)*\.dylib}, "@rpath/lib\\1.dylib"
         inreplace jll, /lib(\w+)\.so(\.\d+)*/, "lib\\1.so"
