@@ -15,6 +15,13 @@ class Kapacitor < Formula
       url "https://github.com/influxdata/kapacitor/commit/1bc086f38b5164813c0f5b0989045bd21d543377.patch?full_index=1"
       sha256 "38ab4f97dfed87cde492c0f1de372dc6563bcdda10741cace7a99f8d3ab777b6"
     end
+
+    # TODO: Remove when release uses flux >= 0.195.0 to get following fix for rust >= 1.78
+    # https://github.com/influxdata/flux/commit/68c831c40b396f0274f6a9f97d77707c39970b02
+    resource "flux" do
+      url "https://github.com/influxdata/flux/archive/refs/tags/v0.194.5.tar.gz"
+      sha256 "85229c86d307fdecccc7d940902fb83bfbd7cff7a308ace831e2487d36a6a8ca"
+    end
   end
 
   livecheck do
@@ -47,6 +54,20 @@ class Kapacitor < Formula
   end
 
   def install
+    # Workaround to skip dead_code lint. RUSTFLAGS workarounds didn't work.
+    if build.stable?
+      flux_module = "github.com/influxdata/flux"
+      flux_version = (buildpath/"go.mod").read[/#{flux_module} v(\d+(?:\.\d+)+)/, 1]
+      odie "Check if `flux` resource can be removed!" if flux_version.blank? || Version.new(flux_version) >= "0.195"
+      (buildpath/"vendored_flux").install resource("flux")
+      inreplace "vendored_flux/libflux/flux-core/src/lib.rs", "#![allow(\n", "\\0    dead_code,\n"
+      (buildpath/"go.work").write <<~EOS
+        go #{Formula["go"].version.major_minor}
+        use .
+        replace #{flux_module} => ./vendored_flux
+      EOS
+    end
+
     resource("pkg-config-wrapper").stage do
       system "go", "build", *std_go_args, "-o", buildpath/"bootstrap/pkg-config"
     end
